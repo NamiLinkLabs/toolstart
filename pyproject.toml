@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toolstart"
-version = "0.1.2"
+version = "0.1.3"
 description = "GPG-encrypted secret injector with interactive profile picker"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -14,7 +14,7 @@ authors = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Topic :: Security :: Cryptography ",
+    "Topic :: Security :: Cryptography",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -23,15 +23,17 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
 ]
-[project.urls]
-Repository = "https://github.com/namilinklabs/toolstart"
-Documentation = "https://github.com/namilinklabs/toolstart"
 
 
 requires-python = ">=3.10"
 dependencies = [
     "pyyaml",
 ]
+
+[project.urls]
+Repository = "https://github.com/namilinklabs/toolstart"
+Documentation = "https://github.com/namilinklabs/toolstart"
+
 
 [project.scripts]
 ts = "ts:main"

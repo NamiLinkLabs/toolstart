@@ -299,6 +299,8 @@ def cmd_edit() -> None:
             f.write("\x00" * 4096)
         os.unlink(tmp)
 
+    cmd_install()
+
 
 def cmd_init() -> None:
     if os.path.exists(CONFIG_PATH):

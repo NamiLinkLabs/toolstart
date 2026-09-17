@@ -25,22 +25,23 @@ cp ts.py ~/.local/bin/ts && chmod 700 ~/.local/bin/ts   # ensure ~/.local/bin is
 
 ```bash
 ts init       # creates ~/.config/toolstart/config.yaml.gpg (GPG passphrase prompt)
-ts edit       # opens decrypted config in $EDITOR, re-encrypts on save
-ts install    # copies ts to ~/.local/bin, writes shell hook functions to your rc file
+ts edit       # opens decrypted config in $EDITOR, re-encrypts on save and installs/updates hooks
 source ~/.zshrc
 
 cortex        # profile picker appears, secrets injected, real tool runs
 ```
+
+`ts edit` auto-runs `ts install` after a successful save, so hooks always
+match your tool list.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `ts hook <tool> [args…]` | Used by shell hooks — shows picker, injects secrets, execs the tool. Don't call directly. |
-| `ts init` | Create an empty encrypted config. |
-| `ts edit` | Decrypt config into `$EDITOR`, validate YAML, re-encrypt on save. Temp file is wiped afterwards. |
+| `ts init` | Create an empty encrypted config, then point you at `ts edit`. |
+| `ts edit` | Decrypt config into `$EDITOR`, validate YAML, re-encrypt on save, then auto-run `ts install`. Temp file is wiped afterwards. |
 | `ts list` | Show configured tools, profiles, base commands, and env var *names* (values are never printed). |
-| `ts get <tool> <profile> <key>` | Print a single env value — for `$(...)` subshell use. |
 | `ts install` | Copy `ts.py` to `~/.local/bin` and add hook functions for each configured tool to `.zshrc` / `.bashrc`. Safe to re-run; replaces the previous hook block. |
 | `ts --help` | Show help. |
 

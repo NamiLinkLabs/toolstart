@@ -59,7 +59,8 @@ Config path: `~/.config/toolstart/config.yaml.gpg` (override with `$TS_CONFIG`).
 
 - `ts hook <tool> [args…]` — used by shell hooks; picker → inject → exec. Don't call directly.
 - `ts get <tool> <profile> <key>` — print one env value for `$(...)` subshell use.
-- `ts init` / `ts edit` — create / edit the encrypted config (YAML validated before saving).
+- `ts init` — create the encrypted config and point the user at `ts edit`.
+- `ts edit` — decrypt config into `$EDITOR`, validate YAML, re-encrypt on save, then auto-run `ts install` so hooks match the saved tool list (skipped when nothing changed or YAML was invalid).
 - `ts list` — show tools, profiles, cmds, env var names (never values).
 - `ts install` — copy `ts.py` to `~/.local/bin/ts` + write hook functions to the rc file.
 
@@ -68,9 +69,8 @@ Config path: `~/.config/toolstart/config.yaml.gpg` (override with `$TS_CONFIG`).
 ```bash
 pip install pyyaml
 cp ts.py ~/.local/bin/ts && chmod 700 ~/.local/bin/ts
-ts init           # creates ~/.config/toolstart/config.yaml.gpg (prompts for passphrase)
-ts edit           # decrypt -> $EDITOR -> re-encrypt; add real secrets here
-ts install        # copies ts to ~/.local/bin, writes shell functions to .zshrc/.bashrc
+ts init           # creates ~/.config/toolstart/config.yaml.gpg, points at ts edit
+ts edit           # decrypt -> $EDITOR -> re-encrypt; add real secrets here (auto-runs ts install on save)
 source ~/.zshrc
 cortex            # picker appears
 ```

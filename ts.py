@@ -5,12 +5,13 @@ ts — toolstart
 GPG-encrypted secret injector with interactive profile picker.
 
 Commands:
-  ts hook <tool> [args...]    Called by shell hooks — shows profile picker,
-                              injects secrets, execs the tool.
-  ts edit                     Decrypt config in $EDITOR and re-encrypt.
-  ts list                     List configured tools and profiles.
-  ts install                  Install shell hooks into your rc file.
-  ts init                     Create an empty encrypted config.
+  ts hook <tool> [args...]           Called by shell hooks — shows profile picker,
+                                     injects secrets, execs the tool.
+  ts get <tool> <profile> <key>      Print a single env-var value (for subshell use).
+  ts edit                            Decrypt config in $EDITOR and re-encrypt.
+  ts list                            List configured tools and profiles.
+  ts install                         Install shell hooks into your rc file.
+  ts init                            Create an empty encrypted config.
 
 Config: ~/.config/toolstart/config.yaml.gpg  (override: $TS_CONFIG)
 
@@ -42,6 +43,7 @@ import sys
 import subprocess
 import tempfile
 import shutil
+import shlex
 import stat
 import curses
 
@@ -75,16 +77,27 @@ def gpg_decrypt(path: str) -> str:
 
 def gpg_encrypt(plaintext: str, path: str, recipient: str | None) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    if recipient:
-        cmd = ["gpg", "--quiet", "--batch", "--yes",
-               "--encrypt", "--recipient", recipient, "--output", path]
-    else:
-        cmd = ["gpg", "--quiet", "--batch", "--yes",
-               "--symmetric", "--cipher-algo", "AES256", "--output", path]
-    r = subprocess.run(cmd, input=plaintext.encode(), capture_output=True)
-    if r.returncode != 0:
-        err = r.stderr.decode(errors="replace").strip()
-        sys.exit(f"ts: GPG encryption failed:\n  {err}")
+    # Write plaintext to a temp file so stdin stays free for GPG's passphrase prompt.
+    fd, tmp = tempfile.mkstemp(prefix="ts-plain-")
+    os.chmod(tmp, stat.S_IRUSR | stat.S_IWUSR)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(plaintext)
+        if recipient:
+            cmd = ["gpg", "--quiet", "--batch", "--yes",
+                   "--encrypt", "--recipient", recipient, "--output", path, tmp]
+        else:
+            # No --batch: lets GPG prompt for passphrase interactively via the terminal.
+            cmd = ["gpg", "--quiet", "--yes",
+                   "--symmetric", "--cipher-algo", "AES256", "--output", path, tmp]
+        r = subprocess.run(cmd, stderr=subprocess.PIPE)
+        if r.returncode != 0:
+            err = r.stderr.decode(errors="replace").strip()
+            sys.exit(f"ts: GPG encryption failed:\n  {err}")
+    finally:
+        with open(tmp, "wb") as f:
+            f.write(b"\x00" * len(plaintext.encode()))
+        os.unlink(tmp)
     os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
 
@@ -195,12 +208,29 @@ def cmd_hook(tool_name: str, extra_args: list[str]) -> None:
     if not base_cmd:
         sys.exit(f"ts: profile '{chosen}' in tool '{tool_name}' has no 'cmd'.")
 
+    if isinstance(base_cmd, str):
+        base_cmd = shlex.split(base_cmd)
     full_cmd = list(base_cmd) + extra_args
 
     try:
         os.execvpe(full_cmd[0], full_cmd, env)
     except FileNotFoundError:
         sys.exit(f"ts: command not found: {full_cmd[0]}")
+
+
+def cmd_get(tool_name: str, profile_name: str, key: str) -> None:
+    """Print a single env-var value to stdout — safe for $(subshell) capture."""
+    config = load_config()
+    tool = get_tool(config, tool_name)
+    profiles = tool.get("profiles", {})
+    if profile_name not in profiles:
+        available = ", ".join(profiles) if profiles else "(none)"
+        sys.exit(f"ts: unknown profile '{profile_name}' for '{tool_name}'.  Available: {available}")
+    env = profiles[profile_name].get("env") or {}
+    if key not in env:
+        available = ", ".join(env) if env else "(none)"
+        sys.exit(f"ts: key '{key}' not found in '{tool_name}/{profile_name}'.  Available: {available}")
+    print(env[key], end="")
 
 
 def cmd_list() -> None:
@@ -213,7 +243,8 @@ def cmd_list() -> None:
         profiles = tval.get("profiles", {})
         print(f"  {tname}")
         for pname, pval in profiles.items():
-            cmd = " ".join(pval.get("cmd") or [])
+            raw_cmd = pval.get("cmd") or []
+            cmd = raw_cmd if isinstance(raw_cmd, str) else " ".join(raw_cmd)
             env_keys = ", ".join((pval.get("env") or {}).keys())
             print(f"    {pname:<14}  cmd: {cmd}")
             if env_keys:
@@ -221,7 +252,7 @@ def cmd_list() -> None:
 
 
 def cmd_edit() -> None:
-    editor = os.environ.get("EDITOR", "nano")
+    editor = os.environ.get("EDITOR", "code --wait")
     recipient = None
 
     if os.path.exists(CONFIG_PATH):
@@ -241,7 +272,7 @@ def cmd_edit() -> None:
             f.write(raw)
 
         mtime_before = os.path.getmtime(tmp)
-        subprocess.run([editor, tmp])
+        subprocess.run(shlex.split(editor) + [tmp])
         mtime_after = os.path.getmtime(tmp)
 
         if mtime_before == mtime_after:
@@ -365,23 +396,28 @@ _EMPTY_CONFIG = """\
 tools:
   cortex:
     profiles:
-      nonprod:
+      np:
         env:
-          SF_NP: your-nonprod-pat
-          SF_P:  your-prod-pat          # used by connections.toml ${SF_P}
-        cmd: [cortex, -c, nonprod]
-      prod:
+          SNOWFLAKE_CONNECTIONS_NP_PASSWORD: your-nonprod-pat
+        cmd: "cortex -c np"
+      p:
         env:
-          SF_NP: your-nonprod-pat
-          SF_P:  your-prod-pat
-        cmd: [cortex, -c, prod]
+          SNOWFLAKE_CONNECTIONS_P_PASSWORD:  your-prod-pat
+        cmd: "cortex -c p"
 
   claude:
     profiles:
       default:
         env:
           ANTHROPIC_API_KEY: sk-ant-...
-        cmd: [claude]
+        cmd: claude
+
+  pypi:
+    profiles:
+      default:
+        env:
+          UV_PUBLISH_TOKEN: pypi-...
+        cmd: "uv publish"
 """
 
 # ---------------------------------------------------------------------------
@@ -405,6 +441,10 @@ def main() -> None:
         cmd_list()
     elif subcmd == "install":
         cmd_install()
+    elif subcmd == "get":
+        if len(args) < 4:
+            sys.exit("ts: usage: ts get <tool> <profile> <key>")
+        cmd_get(args[1], args[2], args[3])
     elif subcmd == "hook":
         if len(args) < 2:
             sys.exit("ts: usage: ts hook <tool> [args...]")

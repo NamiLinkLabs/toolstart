@@ -209,13 +209,17 @@ def cmd_hook(tool_name: str, extra_args: list[str]) -> None:
         sys.exit(f"ts: profile '{chosen}' in tool '{tool_name}' has no 'cmd'.")
 
     if isinstance(base_cmd, str):
-        base_cmd = shlex.split(base_cmd)
-    full_cmd = list(base_cmd) + extra_args
-
-    try:
-        os.execvpe(full_cmd[0], full_cmd, env)
-    except FileNotFoundError:
-        sys.exit(f"ts: command not found: {full_cmd[0]}")
+        # Run via sh -c so shell syntax works (env assignments, pipes, etc.)
+        shell_cmd = base_cmd
+        if extra_args:
+            shell_cmd += " " + " ".join(shlex.quote(a) for a in extra_args)
+        os.execvpe("sh", ["sh", "-c", shell_cmd], env)
+    else:
+        full_cmd = list(base_cmd) + extra_args
+        try:
+            os.execvpe(full_cmd[0], full_cmd, env)
+        except FileNotFoundError:
+            sys.exit(f"ts: command not found: {full_cmd[0]}")
 
 
 def cmd_get(tool_name: str, profile_name: str, key: str) -> None:

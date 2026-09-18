@@ -113,6 +113,3 @@ printed.
 - **Picker doesn't appear / hooks not firing** — re-run `ts install`, then
   `source ~/.zshrc` (or `.bashrc`).
 - **Wrong rc file updated** — `ts install` picks the rc file from `$SHELL`.
-- **Colors look wrong in the picker** — remove the `curses.init_pair` /
-  `curses.color_pair(1)` lines in `pick_profile` (see known issues in
-  `AGENTS.md`).

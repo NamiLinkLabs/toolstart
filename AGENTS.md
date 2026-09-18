@@ -10,7 +10,7 @@ A single-file Python CLI tool (`ts`) that:
 
 ## Current state
 
-The script is complete and syntax-checked. It needs to be tested end-to-end on a real machine with gpg and real tools present.
+`./test_e2e.sh` runs an end-to-end check (list/get/hook/install/edit) with a throwaway GPG key. The multi-profile curses picker and the symmetric-passphrase `ts init` path need a real terminal.
 
 ## File
 
@@ -78,9 +78,7 @@ cortex            # picker appears
 ## Known issues / things to verify on a real machine
 
 - **`ts install` idempotency**: strips old hook block via regex before re-writing. Needs testing when tool list changes between installs.
-- **curses on macOS**: `curses.wrapper` should work fine but `use_default_colors()` behavior can vary by terminal. If colors look wrong, remove the `curses.init_pair` call and drop `curses.color_pair(1)`.
 - **Single-profile auto-skip**: if a tool has exactly one profile, `pick_profile` returns it immediately without showing the picker. This is intentional.
-- **`cmd_edit` temp file wipe**: zeroes 4096 bytes then unlinks. Does not account for files larger than 4096 bytes if the config is very large.
 - **`ts install` shell detection**: reads `$SHELL` env var. If the user's login shell differs from their active shell, the wrong rc file could be targeted.
 - **Python version**: uses `str | None` union syntax which requires Python 3.10+. Should add a version guard at the top or rewrite as `Optional[str]` for broader compat.
 

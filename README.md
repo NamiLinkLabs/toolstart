@@ -57,6 +57,11 @@ editor: code --wait
 # When set, config is encrypted to that public key instead.
 gpg_recipient: you@example.com
 
+# Optional — env vars applied to every tool/profile.
+# A profile's own `env:` overrides these.
+env:
+  OPENCODE_ENABLE_EXA: "1"
+
 tools:
   cortex:                        # hook intercepts the 'cortex' command
     profiles:
@@ -75,6 +80,9 @@ tools:
 
 - `tools.<name>` must match the real binary name — that's what the shell hook
   shadows.
+- Top-level `env:` (optional) is merged into every profile's environment;
+  keys defined in a profile's own `env:` win. `ts list` shows global env var
+  names, and `ts get` falls back to them.
 - `cmd` is the base command — a list, or a shell string (`"cortex -c np"`, run
   via `sh -c`); anything you type after the tool name is appended:
   `cortex -p "hi"` → `cortex -c nonprod -p "hi"`.
@@ -92,7 +100,7 @@ ts hook cortex -p "explain this"
   1. gpg --decrypt config
   2. parse YAML, list profiles
   3. curses picker → user picks "nonprod"
-  4. merge profile env into os.environ copy
+  4. merge global + profile env into os.environ copy
   5. os.execvpe replaces the ts process with the real tool
 ```
 

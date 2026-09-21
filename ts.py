@@ -44,6 +44,10 @@ editor: {editor}
 # Uncomment to use GPG public-key encryption instead of symmetric passphrase:
 # gpg_recipient: you@example.com
 
+# Optional: env vars applied to every tool/profile (profile env overrides):
+# env:
+#   SOME_GLOBAL_VAR: value
+
 tools:
   cortex:
     profiles:
@@ -176,7 +180,8 @@ def pick_profile(tool_name: str, profiles: list[str]) -> str | None:
 # ---------------------------------------------------------------------------
 
 def cmd_hook(tool_name: str, *extra_args: str) -> None:
-    profiles = get_tool(load_config(), tool_name).get("profiles") or {}
+    config = load_config()
+    profiles = get_tool(config, tool_name).get("profiles") or {}
     if not profiles:
         sys.exit(f"ts: tool '{tool_name}' has no profiles defined.")
 
@@ -185,7 +190,10 @@ def cmd_hook(tool_name: str, *extra_args: str) -> None:
         sys.exit(0)  # cancelled — return to the shell prompt quietly
 
     profile = profiles[chosen]
-    env = os.environ | {str(k): str(v) for k, v in (profile.get("env") or {}).items()}
+    # Global env (top-level `env:`) applies to every profile; profile env overrides.
+    env = os.environ \
+        | {str(k): str(v) for k, v in (config.get("env") or {}).items()} \
+        | {str(k): str(v) for k, v in (profile.get("env") or {}).items()}
 
     cmd = profile.get("cmd")
     if not cmd:
@@ -202,19 +210,23 @@ def cmd_hook(tool_name: str, *extra_args: str) -> None:
 
 def cmd_get(tool_name: str, profile_name: str, key: str) -> None:
     """Print one env-var value to stdout, no newline — for $(subshell) capture."""
-    profiles = get_tool(load_config(), tool_name).get("profiles") or {}
+    config = load_config()
+    profiles = get_tool(config, tool_name).get("profiles") or {}
     if profile_name not in profiles:
         sys.exit(f"ts: unknown profile '{profile_name}' for '{tool_name}'.  Available: {', '.join(profiles) or '(none)'}")
-    env = profiles[profile_name].get("env") or {}
+    env = {**(config.get("env") or {}), **(profiles[profile_name].get("env") or {})}
     if key not in env:
         sys.exit(f"ts: key '{key}' not found in '{tool_name}/{profile_name}'.  Available: {', '.join(env) or '(none)'}")
     print(env[key], end="")
 
 
 def cmd_list() -> None:
-    tools = load_config().get("tools", {})
+    config = load_config()
+    tools = config.get("tools", {})
     if not tools:
         print("ts: no tools configured.")
+    if global_env := ", ".join(config.get("env") or {}):
+        print(f"  (global env: {global_env})")
     for tname, tval in tools.items():
         print(f"  {tname}")
         for pname, pval in (tval.get("profiles") or {}).items():

@@ -11,6 +11,9 @@ gpg --batch --quiet --passphrase '' --quick-gen-key ts-test@example.com default 
 
 cat > "$T/plain.yaml" <<'EOF'
 gpg_recipient: ts-test@example.com
+env:
+  TS_E2E_GLOBAL: from-global
+  TS_E2E_VAR: global-should-be-overridden
 tools:
   envtool:
     profiles:
@@ -32,6 +35,9 @@ echo "== list"; python3 "$TS" list
 echo "== get"; python3 "$TS" get envtool only TS_E2E_VAR; echo
 echo "== get missing (expect error)"; python3 "$TS" get envtool only NOPE || true
 echo "== hook single-profile list cmd"; python3 "$TS" hook envtool | grep TS_E2E_VAR
+echo "== hook: global env injected"; python3 "$TS" hook envtool | grep 'TS_E2E_GLOBAL=from-global'
+echo "== get: global fallback"; [ "$(python3 "$TS" get envtool only TS_E2E_GLOBAL)" = "from-global" ] && echo ok
+echo "== get: profile overrides global"; [ "$(python3 "$TS" get envtool only TS_E2E_VAR)" = "hello" ] && echo ok
 echo "== hook str cmd w/ quoted extra args"; python3 "$TS" hook envtool sh -c 'printf "[%s]" "$@"' _ 'a b' 'c"d' ; echo
 echo "== install (first)"; python3 "$TS" install
 echo "== install (second, must not duplicate)"; python3 "$TS" install >/dev/null

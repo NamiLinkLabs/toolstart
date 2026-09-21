@@ -53,6 +53,19 @@ EOF
 chmod +x "$T/ed.sh"
 EDITOR="$T/ed.sh" python3 "$TS" edit
 echo "-- rc after edit:"; grep -E '^\w+\(\)' "$HOME/.zshrc"
+echo "== edit: editor keeps running after save (vscode-like)"
+cat > "$T/slowed.sh" <<'EOF'
+#!/bin/bash
+printf '  slowtool:\n    profiles:\n      d:\n        env: {K: v}\n        cmd: slowtool\n' >> "$1"
+sleep 30
+EOF
+chmod +x "$T/slowed.sh"
+t0=$(date +%s)
+EDITOR="$T/slowed.sh" python3 "$TS" edit
+t1=$(date +%s)
+[ $((t1 - t0)) -lt 15 ] && echo "did not block on lingering editor"
+python3 "$TS" list | grep -q slowtool && echo "config saved"
+pkill -f "slowed.sh" 2>/dev/null || true
 echo "== edit: invalid yaml (expect NOT saved)"
 cat > "$T/bad.sh" <<'EOF'
 #!/bin/bash

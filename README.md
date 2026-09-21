@@ -40,7 +40,7 @@ match your tool list.
 |---------|-------------|
 | `ts hook <tool> [args…]` | Used by shell hooks — shows picker, injects secrets, execs the tool. Don't call directly. |
 | `ts init` | Ask for your editor, create an empty encrypted config, then point you at `ts edit`. |
-| `ts edit` | Decrypt config into your editor, validate YAML, re-encrypt on save, then auto-run `ts install`. Temp file is wiped afterwards. |
+| `ts edit` | Decrypt config into your editor. Detects the save by polling the temp file's mtime, so it validates, re-encrypts, auto-runs `ts install`, and exits as soon as you save — even if the editor (e.g. VS Code) keeps running. Temp file is wiped afterwards. |
 | `ts list` | Show configured tools, profiles, base commands, and env var *names* (values are never printed). |
 | `ts install` | Copy `ts.py` to `~/.local/bin` and add hook functions for each configured tool to `.zshrc` / `.bashrc`. Safe to re-run; replaces the previous hook block. |
 | `ts --help` | Show help. |

@@ -22,6 +22,7 @@ import re
 import sys
 import subprocess
 import tempfile
+import time
 import shutil
 import shlex
 import curses
@@ -240,14 +241,28 @@ def cmd_edit() -> None:
     old = gpg_decrypt(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else EMPTY_CONFIG.format(editor=DEFAULT_EDITOR)
 
     fd, tmp = tempfile.mkstemp(suffix=".yaml", prefix="toolstart-")
+    with os.fdopen(fd, "w") as f:
+        f.write(old)
+    mtime0 = os.path.getmtime(tmp)
+
+    proc = subprocess.Popen(editor_of(old) + [tmp])
+    new = old
     try:
-        with os.fdopen(fd, "w") as f:
-            f.write(old)
-        subprocess.run(editor_of(old) + [tmp])
-        with open(tmp) as f:
-            new = f.read()
+        # Proceed on save (mtime change) or editor exit — whichever comes first.
+        # Editors like VS Code may keep running after the save; don't block on them.
+        while proc.poll() is None and os.path.getmtime(tmp) == mtime0:
+            time.sleep(0.5)
+        if os.path.getmtime(tmp) != mtime0:
+            time.sleep(1)  # let the editor finish its write
+            with open(tmp) as f:
+                new = f.read()
     finally:
-        wipe(tmp)
+        try:
+            proc.wait(timeout=2)  # let the editor release the file before wiping
+        except subprocess.TimeoutExpired:
+            pass
+        if os.path.exists(tmp):
+            wipe(tmp)
 
     if new == old:
         print("ts: no changes, config unchanged.")

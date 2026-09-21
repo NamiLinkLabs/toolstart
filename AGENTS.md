@@ -61,7 +61,7 @@ Config path: `~/.config/toolstart/config.yaml.gpg` (override with `$TS_CONFIG`).
 - `ts hook <tool> [args…]` — used by shell hooks; picker → inject → exec. Don't call directly.
 - `ts get <tool> <profile> <key>` — print one env value for `$(...)` subshell use.
 - `ts init` — prompt for editor, create the encrypted config and point the user at `ts edit`.
-- `ts edit` — decrypt config into the configured editor, validate YAML, re-encrypt on save, then auto-run `ts install` so hooks match the saved tool list (skipped when nothing changed or YAML was invalid).
+- `ts edit` — decrypt config into the configured editor; detects the save by polling the temp file's mtime (does not block on a lingering editor, e.g. VS Code), validates YAML, re-encrypts on save, then auto-runs `ts install` so hooks match the saved tool list (skipped when nothing changed or YAML was invalid).
 - `ts list` — show tools, profiles, cmds, env var names (never values).
 - `ts install` — copy `ts.py` to `~/.local/bin/ts` + write hook functions to the rc file.
 

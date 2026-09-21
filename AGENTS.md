@@ -50,6 +50,7 @@ tools:
       <profile-name>:
         env:
           KEY: value      # injected into the process env
+          TOK: "$(helper --flag)"  # $(cmd) replaced by its stdout at launch; quote if value has ": "
         cmd: [binary, arg1, arg2]   # list, OR a shell string ("cortex -c np")
                                     # run via sh -c; user args appended after either
 ```

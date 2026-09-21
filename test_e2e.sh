@@ -28,6 +28,14 @@ tools:
       b:
         env: {X: "2"}
         cmd: "printf '%s|' \"$X\""
+  subtool:
+    profiles:
+      only:
+        env:
+          TOK: "$(echo --helper: sub)"
+          MIX: "Bearer $(printf %s \"$TS_E2E_GLOBAL\") keep$LITERAL"
+          FAIL: "$(exit 3)"
+        cmd: [env]
 EOF
 gpg --batch --quiet --encrypt --recipient ts-test@example.com --output "$TS_CONFIG" "$T/plain.yaml"
 
@@ -39,6 +47,9 @@ echo "== hook: global env injected"; python3 "$TS" hook envtool | grep 'TS_E2E_G
 echo "== get: global fallback"; [ "$(python3 "$TS" get envtool only TS_E2E_GLOBAL)" = "from-global" ] && echo ok
 echo "== get: profile overrides global"; [ "$(python3 "$TS" get envtool only TS_E2E_VAR)" = "hello" ] && echo ok
 echo "== hook str cmd w/ quoted extra args"; python3 "$TS" hook envtool sh -c 'printf "[%s]" "$@"' _ 'a b' 'c"d' ; echo
+echo "== get: \$(cmd) substituted"; [ "$(python3 "$TS" get subtool only TOK)" = "--helper: sub" ] && echo ok
+echo "== get: embedded \$(cmd) sees global env, \$VAR literal"; [ "$(python3 "$TS" get subtool only MIX)" = 'Bearer from-global keep$LITERAL' ] && echo ok
+echo "== get: failing \$(cmd) (expect error)"; python3 "$TS" get subtool only FAIL || true
 echo "== install (first)"; python3 "$TS" install
 echo "== install (second, must not duplicate)"; python3 "$TS" install >/dev/null
 echo "-- rc file:"; cat "$HOME/.zshrc"

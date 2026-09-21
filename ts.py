@@ -66,6 +66,8 @@ tools:
       default:
         env:
           ANTHROPIC_API_KEY: sk-ant-...
+          # Value from a command, run at launch — keep the double quotes:
+          # ANTHROPIC_AUTH_TOKEN: "$(my-token-helper --quiet)"
         cmd: claude
 
   pypi:
@@ -180,6 +182,22 @@ def pick_profile(tool_name: str, profiles: list[str]) -> str | None:
 # Commands
 # ---------------------------------------------------------------------------
 
+def resolve_env(config: dict, profile: dict, keys=None) -> dict[str, str]:
+    """Global env (top-level `env:`) + profile env (overrides), with each `$(cmd)` replaced
+    by the command's stdout (only for `keys`, if given). Plain `$VAR` is left alone so secrets
+    containing `$` survive."""
+    env = {str(k): str(v) for k, v in ((config.get("env") or {}) | (profile.get("env") or {})).items()}
+
+    def run(m: re.Match) -> str:
+        # stdin/stderr inherited so interactive helpers (MFA prompts etc.) still work
+        r = subprocess.run(["sh", "-c", m.group(1)], stdout=subprocess.PIPE, env=os.environ | env)
+        if r.returncode:
+            sys.exit(f"ts: command failed (exit {r.returncode}): {m.group(1)}")
+        return r.stdout.decode().rstrip("\n")
+
+    return {k: re.sub(r"\$\(([^()]+)\)", run, v) for k, v in env.items() if keys is None or k in keys}
+
+
 def cmd_hook(tool_name: str, *extra_args: str) -> None:
     config = load_config()
     profiles = get_tool(config, tool_name).get("profiles") or {}
@@ -191,10 +209,7 @@ def cmd_hook(tool_name: str, *extra_args: str) -> None:
         sys.exit(0)  # cancelled — return to the shell prompt quietly
 
     profile = profiles[chosen]
-    # Global env (top-level `env:`) applies to every profile; profile env overrides.
-    env = os.environ \
-        | {str(k): str(v) for k, v in (config.get("env") or {}).items()} \
-        | {str(k): str(v) for k, v in (profile.get("env") or {}).items()}
+    env = os.environ | resolve_env(config, profile)
 
     cmd = profile.get("cmd")
     if not cmd:
@@ -215,10 +230,11 @@ def cmd_get(tool_name: str, profile_name: str, key: str) -> None:
     profiles = get_tool(config, tool_name).get("profiles") or {}
     if profile_name not in profiles:
         sys.exit(f"ts: unknown profile '{profile_name}' for '{tool_name}'.  Available: {', '.join(profiles) or '(none)'}")
-    env = {**(config.get("env") or {}), **(profiles[profile_name].get("env") or {})}
-    if key not in env:
-        sys.exit(f"ts: key '{key}' not found in '{tool_name}/{profile_name}'.  Available: {', '.join(env) or '(none)'}")
-    print(env[key], end="")
+    raw = (config.get("env") or {}) | (profiles[profile_name].get("env") or {})
+    if key not in raw:
+        sys.exit(f"ts: key '{key}' not found in '{tool_name}/{profile_name}'.  Available: {', '.join(raw) or '(none)'}")
+    # Resolve only the requested key so unrelated $(...) helpers don't run.
+    print(resolve_env(config, profiles[profile_name], keys=[key])[key], end="")
 
 
 def cmd_list() -> None:

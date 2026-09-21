@@ -89,6 +89,36 @@ tools:
 - If a tool has exactly **one** profile, the picker is skipped and it runs
   immediately.
 
+### Values fetched by a command: `$(...)`
+
+Some secrets are short-lived and come from a helper command instead of being
+stored. Wrap the command in `$(...)` and **put the whole value in double
+quotes**:
+
+```yaml
+tools:
+  claude:
+    profiles:
+      sales:
+        env:
+          ANTHROPIC_AUTH_TOKEN: "$(okta_auth --helper claude --org sales --quiet)"
+          CUSTOM_HEADER: "Bearer $(cat ~/.token)"   # can be part of a longer value
+        cmd: claude
+```
+
+When you type `claude` and pick `sales`, ts runs the helper command and uses what
+it prints as the value of `ANTHROPIC_AUTH_TOKEN`, then starts `claude`.
+
+- The command runs each time you launch the tool, only for the profile you pick.
+- Prompts from the helper (MFA, login) show up in your terminal as normal.
+- If the helper fails (non-zero exit), ts stops and the tool is not started.
+- Only `$(...)` is run. `$VAR` stays literal text, so secrets containing `$`
+  are safe.
+- Always quote. Without quotes, a `: ` (e.g. `--flag: x`) or ` #` inside the
+  command breaks the YAML: it fails with
+  `mapping values are not allowed here` and `ts edit` refuses to save.
+- `ts get <tool> <profile> <key>` also runs the command and prints the result.
+
 ## How it works
 
 ```

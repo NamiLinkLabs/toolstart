@@ -8,7 +8,7 @@ Commands:
   ts hook <tool> [args...]           Called by shell hooks — shows profile picker,
                                      injects secrets, execs the tool.
   ts get <tool> <profile> <key>      Print a single env-var value (for subshell use).
-  ts edit                            Decrypt config in $EDITOR and re-encrypt.
+  ts edit                            Decrypt config in your editor and re-encrypt.
   ts list                            List configured tools and profiles.
   ts install                         Install shell hooks into your rc file.
   ts init                            Create an empty encrypted config.
@@ -33,9 +33,13 @@ except ImportError:
 
 SELF = os.path.realpath(__file__)
 CONFIG_PATH = os.environ.get("TS_CONFIG", os.path.expanduser("~/.config/toolstart/config.yaml.gpg"))
+DEFAULT_EDITOR = os.environ.get("EDITOR", "code --wait")
 
 EMPTY_CONFIG = """\
 # toolstart config — edit with: ts edit
+#
+# Editor command used by `ts edit` (change it here any time):
+editor: {editor}
 #
 # Uncomment to use GPG public-key encryption instead of symmetric passphrase:
 # gpg_recipient: you@example.com
@@ -114,6 +118,15 @@ def load_config() -> dict:
         return yaml.safe_load(gpg_decrypt(CONFIG_PATH)) or {}
     except yaml.YAMLError as e:
         sys.exit(f"ts: invalid YAML in config: {e}")
+
+
+def editor_of(text: str) -> list[str]:
+    """Editor command from the config's `editor:` key; falls back to $EDITOR, then VS Code."""
+    try:
+        cfg = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        cfg = {}
+    return shlex.split(str(cfg.get("editor") or DEFAULT_EDITOR))
 
 
 def get_tool(config: dict, name: str) -> dict:
@@ -212,13 +225,13 @@ def cmd_list() -> None:
 
 
 def cmd_edit() -> None:
-    old = gpg_decrypt(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else EMPTY_CONFIG
+    old = gpg_decrypt(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else EMPTY_CONFIG.format(editor=DEFAULT_EDITOR)
 
     fd, tmp = tempfile.mkstemp(suffix=".yaml", prefix="toolstart-")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(old)
-        subprocess.run(shlex.split(os.environ.get("EDITOR", "code --wait")) + [tmp])
+        subprocess.run(editor_of(old) + [tmp])
         with open(tmp) as f:
             new = f.read()
     finally:
@@ -239,7 +252,8 @@ def cmd_edit() -> None:
 def cmd_init() -> None:
     if os.path.exists(CONFIG_PATH):
         sys.exit(f"ts: config already exists at {CONFIG_PATH}\n    Run: ts edit")
-    gpg_encrypt(EMPTY_CONFIG, CONFIG_PATH, recipient=None)
+    editor = input(f"Editor for 'ts edit' [{DEFAULT_EDITOR}]: ").strip() or DEFAULT_EDITOR
+    gpg_encrypt(EMPTY_CONFIG.format(editor=editor), CONFIG_PATH, recipient=None)
     print(f"ts: created config at {CONFIG_PATH}\n    Run: ts edit   to add tools and secrets.")
 
 

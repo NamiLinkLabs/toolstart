@@ -55,6 +55,24 @@ EOF
 chmod +x "$T/bad.sh"
 EDITOR="$T/bad.sh" python3 "$TS" edit || true
 python3 "$TS" list | grep -q newtool && echo "config intact"
+echo "== edit: editor from config key (EDITOR unset)"
+cat > "$T/cfged.sh" <<'EOF'
+#!/bin/bash
+printf '# via config editor\n' >> "$1"
+EOF
+chmod +x "$T/cfged.sh"
+cat > "$T/seted.sh" <<'EOF'
+#!/bin/bash
+sed -i '' "1s|^|editor: $CFGED\n|" "$1"
+EOF
+chmod +x "$T/seted.sh"
+CFGED="$T/cfged.sh" EDITOR="$T/seted.sh" python3 "$TS" edit >/dev/null
+env -u EDITOR python3 "$TS" edit >/dev/null
+env -u EDITOR EDITOR_CHECK=1 python3 - "$TS_CONFIG" <<'EOF'
+import subprocess,sys
+out=subprocess.run(["gpg","--quiet","--batch","--decrypt",sys.argv[1]],capture_output=True,text=True).stdout
+print("config editor used:", "via config editor" in out)
+EOF
 echo "== perms: $(stat -f '%Lp' "$TS_CONFIG")"
 echo "== leftover temp files: $(ls /tmp /var/folders 2>/dev/null | grep -c 'toolstart-\|ts-plain-' || true)"
 echo "== bad cmd"; python3 "$TS" bogus || true; python3 "$TS" get a b || true

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-ts — toolstart
-==============
+toolstart
+=========
 GPG-encrypted secret injector with interactive profile picker.
 
 Commands:
-  ts hook <tool> [args...]           Called by shell hooks — shows profile picker,
-                                     injects secrets, execs the tool.
-  ts get <tool> <profile> <key>      Print a single env-var value (for subshell use).
-  ts edit                            Decrypt config in your editor and re-encrypt.
-  ts list                            List configured tools and profiles.
-  ts install                         Install shell hooks into your rc file.
-  ts init                            Create an empty encrypted config.
+  toolstart hook <tool> [args...]         Called by shell hooks — shows profile picker,
+                                          injects secrets, execs the tool.
+  toolstart get <tool> <profile> <key>    Print a single env-var value (for subshell use).
+  toolstart edit                          Decrypt config in your editor and re-encrypt.
+  toolstart list                          List configured tools and profiles.
+  toolstart install                       Install shell hooks into your rc file.
+  toolstart init                          Create an empty encrypted config.
 
 Config: ~/.config/toolstart/config.yaml.gpg  (override: $TS_CONFIG)
-Config format: see the template written by `ts init`, or README.md.
+Config format: see the template written by `toolstart init`, or README.md.
 """
 
 import os
@@ -30,16 +30,16 @@ import curses
 try:
     import yaml
 except ImportError:
-    sys.exit("ts: requires PyYAML — run: pip install pyyaml")
+    sys.exit("toolstart: requires PyYAML — run: pip install pyyaml")
 
 SELF = os.path.realpath(__file__)
 CONFIG_PATH = os.environ.get("TS_CONFIG", os.path.expanduser("~/.config/toolstart/config.yaml.gpg"))
 DEFAULT_EDITOR = os.environ.get("EDITOR", "code --wait")
 
 EMPTY_CONFIG = """\
-# toolstart config — edit with: ts edit
+# toolstart config — edit with: toolstart edit
 #
-# Editor command used by `ts edit` (change it here any time):
+# Editor command used by `toolstart edit` (change it here any time):
 editor: {editor}
 #
 # Uncomment to use GPG public-key encryption instead of symmetric passphrase:
@@ -85,7 +85,7 @@ tools:
 def gpg(args: list[str], what: str, **kw) -> subprocess.CompletedProcess:
     r = subprocess.run(["gpg", "--quiet", "--yes", *args], stderr=subprocess.PIPE, **kw)
     if r.returncode:
-        sys.exit(f"ts: GPG {what} failed:\n  {r.stderr.decode(errors='replace').strip()}")
+        sys.exit(f"toolstart: GPG {what} failed:\n  {r.stderr.decode(errors='replace').strip()}")
     return r
 
 
@@ -105,7 +105,7 @@ def gpg_encrypt(plaintext: str, path: str, recipient: str | None) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # Plaintext goes via a temp file (mkstemp creates it 0600) so the terminal
     # stays free for GPG's passphrase prompt.
-    fd, tmp = tempfile.mkstemp(prefix="ts-plain-")
+    fd, tmp = tempfile.mkstemp(prefix="toolstart-plain-")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(plaintext)
@@ -120,11 +120,11 @@ def gpg_encrypt(plaintext: str, path: str, recipient: str | None) -> None:
 
 def load_config() -> dict:
     if not os.path.exists(CONFIG_PATH):
-        sys.exit(f"ts: no config found at {CONFIG_PATH}\n    Run: ts init")
+        sys.exit(f"toolstart: no config found at {CONFIG_PATH}\n    Run: toolstart init")
     try:
         return yaml.safe_load(gpg_decrypt(CONFIG_PATH)) or {}
     except yaml.YAMLError as e:
-        sys.exit(f"ts: invalid YAML in config: {e}")
+        sys.exit(f"toolstart: invalid YAML in config: {e}")
 
 
 def editor_of(text: str) -> list[str]:
@@ -139,7 +139,7 @@ def editor_of(text: str) -> list[str]:
 def get_tool(config: dict, name: str) -> dict:
     tools = config.get("tools", {})
     if name not in tools:
-        sys.exit(f"ts: unknown tool '{name}'.  Configured: {', '.join(tools) or '(none)'}")
+        sys.exit(f"toolstart: unknown tool '{name}'.  Configured: {', '.join(tools) or '(none)'}")
     return tools[name]
 
 
@@ -158,7 +158,7 @@ def pick_profile(tool_name: str, profiles: list[str]) -> str | None:
         while True:
             stdscr.erase()
             h, w = stdscr.getmaxyx()
-            stdscr.addstr(0, 0, f" ts › {tool_name} — select profile (↑↓ enter, q=quit) "[:w], curses.A_BOLD)
+            stdscr.addstr(0, 0, f" toolstart › {tool_name} — select profile (↑↓ enter, q=quit) "[:w], curses.A_BOLD)
             for i, name in enumerate(profiles[: max(h - 2, 0)]):
                 label = f"  {'›' if i == idx else ' '} {name}"
                 stdscr.addstr(i + 2, 0, label[:w], curses.A_REVERSE if i == idx else 0)
@@ -192,7 +192,7 @@ def resolve_env(config: dict, profile: dict, keys=None) -> dict[str, str]:
         # stdin/stderr inherited so interactive helpers (MFA prompts etc.) still work
         r = subprocess.run(["sh", "-c", m.group(1)], stdout=subprocess.PIPE, env=os.environ | env)
         if r.returncode:
-            sys.exit(f"ts: command failed (exit {r.returncode}): {m.group(1)}")
+            sys.exit(f"toolstart: command failed (exit {r.returncode}): {m.group(1)}")
         return r.stdout.decode().rstrip("\n")
 
     return {k: re.sub(r"\$\(([^()]+)\)", run, v) for k, v in env.items() if keys is None or k in keys}
@@ -202,7 +202,7 @@ def cmd_hook(tool_name: str, *extra_args: str) -> None:
     config = load_config()
     profiles = get_tool(config, tool_name).get("profiles") or {}
     if not profiles:
-        sys.exit(f"ts: tool '{tool_name}' has no profiles defined.")
+        sys.exit(f"toolstart: tool '{tool_name}' has no profiles defined.")
 
     chosen = pick_profile(tool_name, list(profiles))
     if chosen is None:
@@ -213,7 +213,7 @@ def cmd_hook(tool_name: str, *extra_args: str) -> None:
 
     cmd = profile.get("cmd")
     if not cmd:
-        sys.exit(f"ts: profile '{chosen}' in tool '{tool_name}' has no 'cmd'.")
+        sys.exit(f"toolstart: profile '{chosen}' in tool '{tool_name}' has no 'cmd'.")
     if isinstance(cmd, str):  # shell string: run via sh -c, user args quoted and appended
         argv = ["sh", "-c", f"{cmd} {shlex.join(extra_args)}"]
     else:
@@ -221,7 +221,7 @@ def cmd_hook(tool_name: str, *extra_args: str) -> None:
     try:
         os.execvpe(argv[0], argv, env)
     except FileNotFoundError:
-        sys.exit(f"ts: command not found: {argv[0]}")
+        sys.exit(f"toolstart: command not found: {argv[0]}")
 
 
 def cmd_get(tool_name: str, profile_name: str, key: str) -> None:
@@ -229,10 +229,10 @@ def cmd_get(tool_name: str, profile_name: str, key: str) -> None:
     config = load_config()
     profiles = get_tool(config, tool_name).get("profiles") or {}
     if profile_name not in profiles:
-        sys.exit(f"ts: unknown profile '{profile_name}' for '{tool_name}'.  Available: {', '.join(profiles) or '(none)'}")
+        sys.exit(f"toolstart: unknown profile '{profile_name}' for '{tool_name}'.  Available: {', '.join(profiles) or '(none)'}")
     raw = (config.get("env") or {}) | (profiles[profile_name].get("env") or {})
     if key not in raw:
-        sys.exit(f"ts: key '{key}' not found in '{tool_name}/{profile_name}'.  Available: {', '.join(raw) or '(none)'}")
+        sys.exit(f"toolstart: key '{key}' not found in '{tool_name}/{profile_name}'.  Available: {', '.join(raw) or '(none)'}")
     # Resolve only the requested key so unrelated $(...) helpers don't run.
     print(resolve_env(config, profiles[profile_name], keys=[key])[key], end="")
 
@@ -241,7 +241,7 @@ def cmd_list() -> None:
     config = load_config()
     tools = config.get("tools", {})
     if not tools:
-        print("ts: no tools configured.")
+        print("toolstart: no tools configured.")
     if global_env := ", ".join(config.get("env") or {}):
         print(f"  (global env: {global_env})")
     for tname, tval in tools.items():
@@ -281,46 +281,48 @@ def cmd_edit() -> None:
             wipe(tmp)
 
     if new == old:
-        print("ts: no changes, config unchanged.")
+        print("toolstart: no changes, config unchanged.")
         return
     try:
         parsed = yaml.safe_load(new) or {}
     except yaml.YAMLError as e:
-        sys.exit(f"ts: invalid YAML — config NOT saved:\n  {e}")
+        sys.exit(f"toolstart: invalid YAML — config NOT saved:\n  {e}")
     gpg_encrypt(new, CONFIG_PATH, parsed.get("gpg_recipient"))
-    print(f"ts: config saved → {CONFIG_PATH}")
+    print(f"toolstart: config saved → {CONFIG_PATH}")
     cmd_install()
 
 
 def cmd_init() -> None:
     if os.path.exists(CONFIG_PATH):
-        sys.exit(f"ts: config already exists at {CONFIG_PATH}\n    Run: ts edit")
-    editor = input(f"Editor for 'ts edit' [{DEFAULT_EDITOR}]: ").strip() or DEFAULT_EDITOR
+        sys.exit(f"toolstart: config already exists at {CONFIG_PATH}\n    Run: toolstart edit")
+    editor = input(f"Editor for 'toolstart edit' [{DEFAULT_EDITOR}]: ").strip() or DEFAULT_EDITOR
     gpg_encrypt(EMPTY_CONFIG.format(editor=editor), CONFIG_PATH, recipient=None)
-    print(f"ts: created config at {CONFIG_PATH}\n    Run: ts edit   to add tools and secrets.")
+    print(f"toolstart: created config at {CONFIG_PATH}\n    Run: toolstart edit   to add tools and secrets.")
 
 
 def cmd_install() -> None:
-    """Copy ts to ~/.local/bin and write one shadowing shell function per tool to the rc file."""
-    dest = os.path.expanduser("~/.local/bin/ts")
-    if os.path.realpath(dest) != SELF:
+    """Copy toolstart to ~/.local/bin and write one shadowing shell function per tool to the rc file."""
+    dest = os.path.expanduser("~/.local/bin/toolstart")
+    if __name__ != "__main__":
+        print("toolstart: installed as a package, `toolstart` entry point already on PATH")  # uv tool / pipx / pip
+    elif os.path.realpath(dest) != SELF:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(SELF, dest)
         os.chmod(dest, 0o700)
-        print(f"ts: installed → {dest}")
+        print(f"toolstart: installed → {dest}")
     else:
-        print(f"ts: already at {dest}")
+        print(f"toolstart: already at {dest}")
 
     if not os.path.exists(CONFIG_PATH):
-        print("ts: no config yet — run 'ts init' first, then 'ts install' again.")
+        print("toolstart: no config yet — run 'toolstart init' first, then 'toolstart install' again.")
         return
     tools = list(load_config().get("tools", {}))
     if not tools:
-        print("ts: no tools in config, nothing to hook.")
+        print("toolstart: no tools in config, nothing to hook.")
         return
 
-    hooks = "".join(f'{t}() {{ command ts hook {t} "$@"; }}\n' for t in tools)
-    snippet = f"\n# --- toolstart hooks (added by: ts install) ---\n{hooks}# --- end toolstart hooks ---\n"
+    hooks = "".join(f'{t}() {{ command toolstart hook {t} "$@"; }}\n' for t in tools)
+    snippet = f"\n# --- toolstart hooks (added by: toolstart install) ---\n{hooks}# --- end toolstart hooks ---\n"
 
     shell = os.path.basename(os.environ.get("SHELL", "bash"))
     rc_file = os.path.expanduser("~/.zshrc" if shell == "zsh" else "~/.bashrc")
@@ -330,7 +332,7 @@ def cmd_install() -> None:
     with open(rc_file, "w") as f:
         f.write(content + snippet)
 
-    print(f"ts: hooks for {tools} written to {rc_file}\n    Reload with:  source {rc_file}")
+    print(f"toolstart: hooks for {tools} written to {rc_file}\n    Reload with:  source {rc_file}")
 
 
 # ---------------------------------------------------------------------------
@@ -351,9 +353,9 @@ def main() -> None:
     elif sub == "hook" and rest:
         cmd_hook(*rest)
     elif sub in ("get", "hook"):
-        sys.exit("ts: usage: ts get <tool> <profile> <key>" if sub == "get" else "ts: usage: ts hook <tool> [args...]")
+        sys.exit("toolstart: usage: toolstart get <tool> <profile> <key>" if sub == "get" else "toolstart: usage: toolstart hook <tool> [args...]")
     else:
-        sys.exit(f"ts: unknown command '{sub}'.  Run: ts --help")
+        sys.exit(f"toolstart: unknown command '{sub}'.  Run: toolstart --help")
 
 
 if __name__ == "__main__":

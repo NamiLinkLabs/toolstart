@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - name: Smoke test wheel
+        run: uvx --from dist/*.whl toolstart --help
+
+  e2e:
+    runs-on: macos-latest   # test_e2e.sh uses BSD sed/stat and zsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: command -v gpg || brew install gnupg
+      - run: uv run --with pyyaml ./test_e2e.sh
+        env:
+          UV_NO_PROJECT: "1"

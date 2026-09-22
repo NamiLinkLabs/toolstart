@@ -1,16 +1,16 @@
 #!/bin/bash
-# End-to-end test of ts.py using a throwaway GNUPGHOME + HOME.
+# End-to-end test of toolstart.py using a throwaway GNUPGHOME + HOME.
 set -euo pipefail
-TS="$(cd "$(dirname "$0")" && pwd)/ts.py"
+TS="$(cd "$(dirname "$0")" && pwd)/toolstart.py"
 T=$(mktemp -d)
 export HOME="$T/home" GNUPGHOME="$T/gnupg" SHELL=/bin/zsh
 mkdir -p "$HOME" "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
 export TS_CONFIG="$HOME/cfg.yaml.gpg"
 
-gpg --batch --quiet --passphrase '' --quick-gen-key ts-test@example.com default default never 2>/dev/null
+gpg --batch --quiet --passphrase '' --quick-gen-key toolstart-test@example.com default default never 2>/dev/null
 
 cat > "$T/plain.yaml" <<'EOF'
-gpg_recipient: ts-test@example.com
+gpg_recipient: toolstart-test@example.com
 env:
   TS_E2E_GLOBAL: from-global
   TS_E2E_VAR: global-should-be-overridden
@@ -37,7 +37,7 @@ tools:
           FAIL: "$(exit 3)"
         cmd: [env]
 EOF
-gpg --batch --quiet --encrypt --recipient ts-test@example.com --output "$TS_CONFIG" "$T/plain.yaml"
+gpg --batch --quiet --encrypt --recipient toolstart-test@example.com --output "$TS_CONFIG" "$T/plain.yaml"
 
 echo "== list"; python3 "$TS" list
 echo "== get"; python3 "$TS" get envtool only TS_E2E_VAR; echo
@@ -104,7 +104,7 @@ out=subprocess.run(["gpg","--quiet","--batch","--decrypt",sys.argv[1]],capture_o
 print("config editor used:", "via config editor" in out)
 EOF
 echo "== perms: $(stat -f '%Lp' "$TS_CONFIG")"
-echo "== leftover temp files: $(ls /tmp /var/folders 2>/dev/null | grep -c 'toolstart-\|ts-plain-' || true)"
+echo "== leftover temp files: $(ls /tmp /var/folders 2>/dev/null | grep -c 'toolstart-\|toolstart-plain-' || true)"
 echo "== bad cmd"; python3 "$TS" bogus || true; python3 "$TS" get a b || true
 gpgconf --kill gpg-agent 2>/dev/null || true
 rm -rf "$T"

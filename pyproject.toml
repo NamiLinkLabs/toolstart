@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toolstart"
-version = "0.1.3"
+version = "0.2.0"
 description = "GPG-encrypted secret injector with interactive profile picker"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -36,10 +36,10 @@ Documentation = "https://github.com/namilinklabs/toolstart"
 
 
 [project.scripts]
-ts = "ts:main"
+toolstart = "toolstart:main"
 
 [tool.hatch.build.targets.wheel]
-include = ["ts.py"]
+include = ["toolstart.py"]
 
 [tool.uv]
 publish-url = "https://test.pypi.org/legacy/"

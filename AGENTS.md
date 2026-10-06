@@ -84,7 +84,7 @@ Config path: `~/.config/toolstart/config.yaml.gpg` (override with `$TS_CONFIG`).
 ## Packaging / release
 
 - `pyproject.toml` (hatchling) builds a wheel of the `toolstart` package with the `toolstart = "toolstart.cli:main"` entry point. `uv build` / `uv tool install toolstart`.
-- `.github/workflows/ci.yml`: build + wheel smoke test (ubuntu, windows), `tests/test_e2e.sh` + `tests/test_picker.py` + `tests/test_gui.py` (macos, needs BSD sed/stat + zsh).
+- `.github/workflows/ci.yml`: build + wheel smoke test (windows), `tests/test_e2e.sh` + `tests/test_picker.py` + `tests/test_gui.py` (macos, needs BSD sed/stat + zsh).
 - `.github/workflows/release.yml`: `workflow_dispatch` with a `bump` input runs `uv version --bump`, commits, tags `vX.Y.Z`, `uv build`, `uv publish` (PyPI trusted publishing, env `pypi`), `gh release create`. Also runs on a pushed `v*` tag (skips the bump, checks tag == pyproject version).
 - `[tool.uv] publish-url` in pyproject points at TestPyPI for local `uv publish`; the workflow overrides it with `--publish-url` for real PyPI.
 

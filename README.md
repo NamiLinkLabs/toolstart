@@ -11,8 +11,10 @@ live only in memory, never on disk in plaintext.
 ## Requirements
 
 - Python 3.10+
-- [GPG](https://gnupg.org/) (`gpg` on PATH)
-- [PyYAML](https://pypi.org/project/PyYAML/) — `pip install pyyaml`
+- [GPG](https://gnupg.org/) (`gpg` on PATH; Windows: [Gpg4win](https://gpg4win.org/))
+- macOS / Linux (zsh, bash) or Windows (PowerShell 7 / Windows PowerShell 5.1)
+- tkinter, for the `toolstart edit` window — bundled with python.org and uv-managed Pythons;
+  Homebrew: `brew install python-tk`, Debian/Ubuntu: `sudo apt install python3-tk`
 
 ## Install
 
@@ -28,115 +30,163 @@ Plain pip also works (`pip install --user toolstart`, update with `pip install -
 but system Pythons on Debian/Ubuntu/Homebrew refuse installs outside a venv (PEP 668),
 and macOS puts user scripts in `~/Library/Python/3.x/bin` — make sure that dir is on PATH.
 
-From source, no package (single file):
+From a checkout: `uv tool install .` (editable for development: `uv tool install -e . --force`)
 
-```bash
-pip install pyyaml
-cp toolstart.py ~/.local/bin/toolstart && chmod 700 ~/.local/bin/toolstart   # ensure ~/.local/bin is on PATH
+### Windows (PowerShell)
+
+PowerShell only loads `$PROFILE` (where the hooks live) if scripts are allowed:
+
+```powershell
+Get-ExecutionPolicy -List                               # MachinePolicy/UserPolicy must be Undefined
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
+If `MachinePolicy` or `UserPolicy` is `Restricted` / `AllSigned`, group policy enforces it
+and the hooks can't load on that machine.
+
+Then install `gpg`, `uv` and toolstart with one of these blocks (paste it as a whole;
+uv downloads a Python itself if none is installed):
+
+<details>
+<summary><b>winget</b> (built into Windows 10/11)</summary>
+
+```powershell
+winget install GnuPG.Gpg4win      # gpg (installer needs admin)
+winget install astral-sh.uv
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+uv tool install toolstart
+uv tool update-shell              # puts uv's tool bin dir on PATH for new terminals
+gpg --version
+```
+
+`0x8a15000f : Data required by the source is missing` → the winget source index is broken:
+run `winget source reset --force` in an **admin** terminal, then `winget source update`.
+No admin rights? Use scoop instead.
+
+</details>
+
+<details>
+<summary><b>scoop</b> (per-user, no admin needed)</summary>
+
+```powershell
+irm get.scoop.sh | iex            # installs scoop itself (needs the execution policy above)
+scoop install gpg uv
+uv tool install toolstart
+uv tool update-shell              # puts uv's tool bin dir on PATH for new terminals
+gpg --version
+```
+
+</details>
+
+Then open a **new** terminal:
+
+```powershell
+toolstart init; toolstart edit
+. $PROFILE                        # or open a new terminal
+```
+
+PyYAML is installed automatically as a dependency; nothing else is needed.
+
 **Who owns the binary?** Whatever installed it. `uv tool` / `pipx` / `pip` write the
-`toolstart` entry point and replace it on upgrade; `toolstart install` never touches it
-in that case — it only (re)writes the shell hooks. The self-copy to `~/.local/bin` only
-happens when you run `toolstart.py` straight from a checkout. Hooks call `command toolstart`,
-so any bin dir on PATH works.
+`toolstart` entry point and replace it on upgrade; `toolstart install` only (re)writes the
+shell hooks. Hooks call `toolstart` from PATH, so any bin dir on PATH works.
+
+**Updates.** At most every 6 hours `toolstart hook` asks PyPI for the latest version
+(cached in `~/.cache/toolstart/update-check.json`, 2 s timeout, silent when offline).
+If a newer one exists, a prompt appears before the profile picker: **install** (upgrades
+via uv tool / pipx / pip, then restarts the picker) or **skip this version** (asks again
+only for a newer release); `Esc` = ask later.
+Untick *Check PyPI for new toolstart versions* in `toolstart edit` › settings to turn it
+off — the update code is then not even imported.
 
 ## Quick start
 
 ```bash
-toolstart init       # asks which editor to use, creates ~/.config/toolstart/config.yaml.gpg (GPG passphrase prompt)
-toolstart edit       # opens decrypted config in that editor, re-encrypts on save and installs/updates hooks
-source ~/.zshrc
+toolstart init       # pick the GPG key to encrypt to (or create one / use a passphrase)
+toolstart edit       # window: add tools, profiles, secrets; Save encrypts and installs the hooks
+source ~/.zshrc      # PowerShell: . $PROFILE
 
 cortex        # profile picker appears, secrets injected, real tool runs
 ```
 
-`toolstart edit` auto-runs `toolstart install` after a successful save, so hooks always
-match your tool list.
+### `toolstart edit`
+
+A window with your tools and profiles on the left and the selected item's form on the right:
+
+- **settings** — which GPG key the config is encrypted to, the update check, and global env vars.
+- **a profile** — the command to run and its env vars. Values are masked (`••••`) until you
+  press *show*. `+ variable` adds a row, `✕` removes one.
+- **+ tool / + profile / rename / delete** on the left. A new tool starts with a `default`
+  profile that runs the tool itself.
+- **Save** (`Ctrl+S`, macOS `Cmd+S`) checks the names, encrypts the config and re-installs the
+  hooks. A problem (empty or duplicate name, profile without a command) is shown at the
+  bottom and the window stays open with your edits.
+
+The config is edited in memory only — no temp file, no plaintext on disk.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `toolstart hook <tool> [args…]` | Used by shell hooks — shows picker, injects secrets, execs the tool. Don't call directly. |
-| `toolstart init` | Ask for your editor, create an empty encrypted config, then point you at `toolstart edit`. |
-| `toolstart edit` | Decrypt config into your editor. Detects the save by polling the temp file's mtime, so it validates, re-encrypts, auto-runs `toolstart install`, and exits as soon as you save — even if the editor (e.g. VS Code) keeps running. Temp file is wiped afterwards. |
+| `toolstart hook <tool> [args…]` | Used by shell hooks — shows picker, injects secrets, launches the tool. Don't call directly. |
+| `toolstart init` | Pick the GPG key to encrypt to from a menu of your secret keys — or create a new key (`gpg --quick-gen-key`), or use a symmetric passphrase. Creates an empty encrypted config. |
+| `toolstart edit` | Edit tools, profiles and secrets in a window (see above). Save re-encrypts and runs `toolstart install`. |
 | `toolstart list` | Show configured tools, profiles, base commands, and env var *names* (values are never printed). |
-| `toolstart install` | Add hook functions for each configured tool to `.zshrc` / `.bashrc`. Safe to re-run; replaces the previous hook block. When run from a checkout (not a package install) it also copies `toolstart.py` to `~/.local/bin`. |
+| `toolstart install` | Add hook functions for each configured tool to `.zshrc` / `.bashrc` (from `$SHELL`), or on Windows to the `$PROFILE` of every installed PowerShell (`pwsh`, `powershell`). Safe to re-run; replaces the previous hook block. |
 | `toolstart --help` | Show help. |
 
 ## Config format
 
-Stored at `~/.config/toolstart/config.yaml.gpg` (override with `$TS_CONFIG`).
+Stored at `~/.config/toolstart/config.yaml.gpg` (override with `$TS_CONFIG`). You don't edit
+it directly — `toolstart edit` does. For reference, this is what it holds:
 
 ```yaml
-# Editor for `toolstart edit`. Set by `toolstart init`; falls back to $EDITOR, then `code --wait`.
-editor: code --wait
-
-# Optional — omit for symmetric passphrase encryption.
-# When set, config is encrypted to that public key instead.
-gpg_recipient: you@example.com
-
-# Optional — env vars applied to every tool/profile.
-# A profile's own `env:` overrides these.
-env:
+gpg_recipient: 3F2A…C91D          # key fingerprint; absent = symmetric passphrase
+env:                              # global env, merged into every profile
   OPENCODE_ENABLE_EXA: "1"
-
 tools:
-  cortex:                        # hook intercepts the 'cortex' command
+  cortex:                         # the hook intercepts the `cortex` command
     profiles:
       np:
-        env:                     # injected into the process environment
-          SNOWFLAKE_CONNECTIONS_NP_PASSWORD: pat-nonprod
-        cmd: cortex -c np   # base command; user args are appended
-
-  claude:
-    profiles:
-      default:
+        cmd: cortex -c np         # base command; your args are appended
         env:
-          ANTHROPIC_API_KEY: sk-ant-...
-        cmd: [claude]
+          SNOWFLAKE_CONNECTIONS_NP_PASSWORD: pat-nonprod
 ```
 
-- `tools.<name>` must match the real binary name — that's what the shell hook
+- A tool's name must match the real binary name — that's what the shell hook
   shadows.
-- Top-level `env:` (optional) is merged into every profile's environment;
-  keys defined in a profile's own `env:` win. `toolstart list` shows global env var
+- Global env (settings) is merged into every profile's environment; a profile's own
+  value wins. `toolstart list` shows global env var
   names, and `toolstart get` falls back to them.
-- `cmd` is the base command — a list, or a shell string (`"cortex -c np"`, run
-  via `sh -c`); anything you type after the tool name is appended:
+- The command is a shell string (`cortex -c np`, run
+  via `sh -c`, on Windows via `cmd.exe`); anything you type after the tool name is appended:
   `cortex -p "hi"` → `cortex -c nonprod -p "hi"`.
+  On Windows that means cmd.exe syntax even when you launch from PowerShell: reference a
+  variable in the command or a `$(...)` helper as `%KEY%`, not `$env:KEY`
+  (`echo %KEY%`). Plain commands like `claude` don't care — the env vars are
+  injected into the tool either way.
 - If a tool has exactly **one** profile, the picker is skipped and it runs
   immediately.
 
 ### Values fetched by a command: `$(...)`
 
 Some secrets are short-lived and come from a helper command instead of being
-stored. Wrap the command in `$(...)` and **put the whole value in double
-quotes**:
+stored. Put the command in `$(...)` as the variable's value:
 
-```yaml
-tools:
-  claude:
-    profiles:
-      sales:
-        env:
-          ANTHROPIC_AUTH_TOKEN: "$(okta_auth --helper claude --org sales --quiet)"
-          CUSTOM_HEADER: "Bearer $(cat ~/.token)"   # can be part of a longer value
-        cmd: claude
-```
+| Variable | Value |
+|---|---|
+| `ANTHROPIC_AUTH_TOKEN` | `$(okta_auth --helper claude --org sales --quiet)` |
+| `CUSTOM_HEADER` | `Bearer $(cat ~/.token)` — can be part of a longer value |
 
 When you type `claude` and pick `sales`, toolstart runs the helper command and uses what
 it prints as the value of `ANTHROPIC_AUTH_TOKEN`, then starts `claude`.
 
 - The command runs each time you launch the tool, only for the profile you pick.
+  It runs via `/bin/sh` (Windows: `cmd.exe`).
 - Prompts from the helper (MFA, login) show up in your terminal as normal.
 - If the helper fails (non-zero exit), toolstart stops and the tool is not started.
 - Only `$(...)` is run. `$VAR` stays literal text, so secrets containing `$`
   are safe.
-- Always quote. Without quotes, a `: ` (e.g. `--flag: x`) or ` #` inside the
-  command breaks the YAML: it fails with
-  `mapping values are not allowed here` and `toolstart edit` refuses to save.
 - `toolstart get <tool> <profile> <key>` also runs the command and prints the result.
 
 ## How it works
@@ -149,9 +199,10 @@ shell function (.zshrc):  cortex() { command toolstart hook cortex "$@" }
 toolstart hook cortex -p "explain this"
   1. gpg --decrypt config
   2. parse YAML, list profiles
-  3. curses picker → user picks "nonprod"
+  3. arrow-key picker (plain ANSI, no curses) → user picks "nonprod"
   4. merge global + profile env into os.environ copy
   5. os.execvpe replaces the toolstart process with the real tool
+   (Windows has no exec: the tool runs as a child, toolstart passes its exit code through)
 ```
 
 Secrets exist in memory only between steps 1–4. Nothing is written to disk or
@@ -160,11 +211,20 @@ printed.
 ## Security notes
 
 - The config file is chmod `600` after every encrypt.
-- `toolstart edit` wipes its temp file before deletion.
+- `toolstart edit` keeps the decrypted config in memory; the plaintext reaches `gpg` through
+  a pipe, never a file. The new config replaces the old one only after `gpg` succeeded.
 - Cancel the picker (`q`, `Esc`, `Ctrl-C`) and the shell prompt returns without
   running anything.
-- For public-key (asymmetric) encryption, set `gpg_recipient` in the config —
-  useful for automation where no passphrase prompt is possible.
+- **Passphrases are asked by toolstart, not by a GPG popup** (those open behind the terminal
+  on Windows): in the terminal for `cortex` & co., in a masked dialog in `toolstart edit`.
+  toolstart first tries without one — if gpg-agent has it cached (or the key has none) you're
+  not asked at all; a wrong one is asked again (3 tries). It's handed to `gpg` through a pipe
+  (loopback mode), never via the command line or a file.
+- Prefer a key (`gpg_recipient`) over a symmetric passphrase: saving then needs no passphrase,
+  and the key's passphrase is cached by gpg-agent after the first use. A symmetric passphrase
+  isn't cached in this mode — it's asked on **every** launch, and twice on every save.
+- **Lock** (forget cached passphrases): `gpgconf --reload gpg-agent`. Cache length is set in
+  `gpg-agent.conf` (`default-cache-ttl`, `max-cache-ttl`; folder: `gpgconf --list-dirs homedir`).
 - `toolstart list` deliberately prints only env var names, never values.
 
 ## Troubleshooting
@@ -172,8 +232,17 @@ printed.
 - **`toolstart: GPG decryption failed`** — wrong passphrase, or your key isn't
   available. Test with `gpg --decrypt ~/.config/toolstart/config.yaml.gpg`.
 - **Picker doesn't appear / hooks not firing** — re-run `toolstart install`, then
-  `source ~/.zshrc` (or `.bashrc`).
+  `source ~/.zshrc` (or `.bashrc`; PowerShell: `. $PROFILE`).
 - **Wrong rc file updated** — `toolstart install` picks the rc file from `$SHELL`.
+- **`toolstart edit`: needs tkinter** — install it (see Requirements) or reinstall on uv's own
+  Python: `uv tool install --python-preference only-managed --force toolstart`.
+- **Mistakes in a config written by hand** (before `toolstart edit` had a window: `KEY:value`
+  without the space, `env:` not indented, …) are reported with the tool/profile they're in —
+  never with the value. Fix them by hand once, then use `toolstart edit`:
+  `gpg -d ~/.config/toolstart/config.yaml.gpg > plain.yaml`, edit, then
+  `gpg -e -r <your key> -o ~/.config/toolstart/config.yaml.gpg --yes plain.yaml` and delete `plain.yaml`.
+- **`toolstart: unexpected error — …`** — a bug; rerun with `TS_DEBUG=1` for the full
+  traceback and open an issue.
 
 ## Releasing
 

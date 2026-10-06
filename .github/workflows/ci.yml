@@ -7,20 +7,28 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest   # packaging + the only Windows check (_win.py imports msvcrt/ctypes.windll)
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv build
       - name: Smoke test wheel
+        shell: bash
         run: uvx --from dist/*.whl toolstart --help
 
   e2e:
-    runs-on: macos-latest   # test_e2e.sh uses BSD sed/stat and zsh
+    runs-on: macos-latest   # tests/test_e2e.sh uses BSD sed/stat and zsh
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: command -v gpg || brew install gnupg
-      - run: uv run --with pyyaml ./test_e2e.sh
+      - run: uv run --with pyyaml ./tests/test_e2e.sh
         env:
           UV_NO_PROJECT: "1"
+      - name: Picker + update prompt via pty (installed wheel, run outside the checkout)
+        run: |
+          uv build
+          uv venv --python-preference only-managed "$RUNNER_TEMP/v" && uv pip install --python "$RUNNER_TEMP/v" dist/*.whl
+          cd "$RUNNER_TEMP" && "$RUNNER_TEMP/v/bin/python" "$GITHUB_WORKSPACE/tests/test_picker.py"
+      - name: Editor window (tkinter, driven programmatically)
+        run: cd "$RUNNER_TEMP" && "$RUNNER_TEMP/v/bin/python" "$GITHUB_WORKSPACE/tests/test_gui.py"
